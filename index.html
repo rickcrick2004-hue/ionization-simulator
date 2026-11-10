@@ -60,12 +60,12 @@
 </head>
 <body class="min-h-screen flex flex-col p-2 md:p-4 gap-3 max-w-[1440px] mx-auto">
 
-    <!-- 1. 上部：9種類の物質を横に並べた選択ボタンエリア -->
+    <!-- 1. 上部：10種類の物質を横に並べた選択ボタンエリア -->
     <header class="bg-white rounded-2xl shadow-md p-2.5 border border-slate-200">
         <div class="flex items-center justify-between mb-2 px-1">
             <div class="flex items-center gap-2">
                 <span class="bg-indigo-600 text-white text-xs md:text-sm font-black px-2.5 py-1 rounded-lg">STEP 1</span>
-                <h1 class="text-base md:text-xl font-black text-slate-800">水に溶かす物質をえらぼう（タップすると水の中に落ちていきます）</h1>
+                <h1 class="text-base md:text-xl font-black text-slate-800">物質をえらんで、ビーカーの上に現れた分子をタップして水に入れよう！</h1>
             </div>
             <div class="flex items-center gap-3 text-xs md:text-sm font-bold">
                 <span class="flex items-center gap-1"><span class="inline-block w-4 h-4 rounded-full bg-red-600 border-2 border-white shadow"></span>水素イオン(H<sup>+</sup>)</span>
@@ -73,9 +73,9 @@
             </div>
         </div>
 
-        <!-- プルダウンを使わず9つのボタンを横一列（グリッド）で配置 -->
-        <div class="grid grid-cols-9 gap-1.5 md:gap-2" id="substanceButtonsContainer">
-            <!-- JSで9種類のボタンを生成 -->
+        <!-- プルダウンを使わず10個のボタンを横一列（グリッド）で配置 -->
+        <div class="grid grid-cols-10 gap-1 md:gap-1.5" id="substanceButtonsContainer">
+            <!-- JSで10種類のボタンを生成 -->
         </div>
     </header>
 
@@ -138,7 +138,7 @@
                     </div>
                     <!-- 先生・生徒用：式を隠す/見せるトグル -->
                     <button id="toggleEquationBtn" class="text-xs md:text-sm font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1 rounded-lg border border-slate-300">
-                        式を隠す
+                        式を表示する
                     </button>
                 </div>
 
@@ -150,9 +150,9 @@
                     </button>
                 </div>
 
-                <!-- 電離の式・解説ボックス -->
-                <div id="equationCard" class="bg-slate-800 text-white rounded-xl p-3.5 text-center flex flex-col items-center justify-center min-h-[110px] shadow-inner">
-                    <p class="text-xs md:text-sm text-slate-300 font-bold mb-1" id="equationSubTitle">電離のようす（化学反応式）</p>
+                <!-- 電離の式・解説ボックス（タップでも表示/非表示を切り替え可能） -->
+                <div id="equationCard" class="bg-slate-800 hover:bg-slate-700 cursor-pointer transition-colors text-white rounded-xl p-3.5 text-center flex flex-col items-center justify-center min-h-[110px] shadow-inner select-none" title="タップして式の表示・非表示を切り替え">
+                    <p class="text-xs md:text-sm text-slate-300 font-bold mb-1" id="equationSubTitle">電離のようす（タップで表示 / 非表示）</p>
                     <div id="equationDisplay" class="text-xl md:text-3xl font-black tracking-wider my-1">
                         物質を選択してください
                     </div>
@@ -221,9 +221,9 @@
 
     <script>
         /**
-         * 9種類の物質データ定義
+         * 10種類の物質データ定義
          * - 酸性3種：塩化水素、硫酸、硝酸
-         * - アルカリ性4種：水酸化ナトリウム、水酸化カリウム、水酸化バリウム、水酸化カルシウム
+         * - アルカリ性5種：水酸化ナトリウム、水酸化カリウム、水酸化バリウム、水酸化カルシウム、アンモニア
          * - 中性（電解質）1種：塩化ナトリウム
          * - 中性（非電解質）1種：砂糖（スクロース）
          */
@@ -338,6 +338,25 @@
                 ]
             },
             {
+                id: 'nh3',
+                name: 'アンモニア',
+                subName: '(アンモニア水)',
+                formulaHtml: 'NH<sub>3</sub>',
+                formulaText: 'NH₃',
+                category: 'alkaline',
+                isElectrolyte: true,
+                equationHtml: 'NH<sub>3</sub> + H<sub>2</sub>O → NH<sub>4</sub><sup>+</sup> + <span class="text-sky-400">OH<sup>-</sup></span>',
+                description: '電解質 ／ アルカリ性（水と反応してOH⁻が生じる）',
+                // 落下中はNH3の1粒で表現し、水中でNH4+とOH-に分かれる
+                preDissolveParts: [
+                    { label: 'NH₃', charge: '', type: 'other_cation', offsetX: 0, offsetY: 0, radius: 30 }
+                ],
+                moleculeParts: [
+                    { label: 'NH₄', charge: '+', type: 'other_cation', offsetX: -22, offsetY: 0, radius: 28 },
+                    { label: 'OH', charge: '-', type: 'OH', offsetX: 22, offsetY: 0, radius: 26 }
+                ]
+            },
+            {
                 id: 'nacl',
                 name: '塩化ナトリウム',
                 subName: '(食塩)',
@@ -371,10 +390,11 @@
         // アプリケーションの状態管理
         let currentSubstance = null;
         let currentIndicator = 'none'; // 'none' | 'btb' | 'pp'
-        let showEquation = true;
+        // デフォルトでは電離式は伏せた状態にする
+        let showEquation = false;
 
         // アニメーション用オブジェクト配列
-        let fallingMolecules = []; // 水に向かって落下中〜電離直前の塊
+        let fallingMolecules = []; // ビーカー上で待機中〜水に向かって落下中〜電離直前の塊
         let floatingParticles = []; // 水中で電離して漂っているイオン（または砂糖分子）
         let splashRipples = [];     // 水面に落ちたときの波紋・電離エフェクト
         let indicatorDrops = [];    // 指示薬のスポイトから落ちるしずく
@@ -387,7 +407,7 @@
         let beakerRect = { x: 0, y: 0, w: 0, h: 0, waterTop: 0 };
 
         /**
-         * 1. 上部の9つの物質選択ボタンを生成
+         * 1. 上部の10個の物質選択ボタンを生成
          */
         function initSubstanceButtons() {
             const container = document.getElementById('substanceButtonsContainer');
@@ -396,14 +416,14 @@
             SUBSTANCES.forEach(sub => {
                 const btn = document.createElement('button');
                 btn.id = `sub-btn-${sub.id}`;
-                btn.className = `substance-btn flex flex-col items-center justify-between p-1.5 md:p-2 rounded-xl border-2 border-slate-300 bg-slate-50 hover:bg-white text-slate-800 shadow-sm h-full`;
+                btn.className = `substance-btn flex flex-col items-center justify-between p-1 md:p-1.5 rounded-xl border-2 border-slate-300 bg-slate-50 hover:bg-white text-slate-800 shadow-sm h-full`;
                 
                 btn.innerHTML = `
-                    <div class="text-[11px] md:text-xs font-black leading-tight text-center text-slate-700">
+                    <div class="text-[10px] md:text-xs font-black leading-tight text-center text-slate-700">
                         ${sub.name}
-                        ${sub.subName ? `<span class="block text-[10px] text-slate-500 font-bold">${sub.subName}</span>` : ''}
+                        ${sub.subName ? `<span class="block text-[9px] text-slate-500 font-bold">${sub.subName}</span>` : ''}
                     </div>
-                    <div class="text-sm md:text-lg font-black text-indigo-950 bg-white px-2 py-0.5 rounded-lg border border-slate-200 mt-1 w-full text-center">
+                    <div class="text-xs md:text-base font-black text-indigo-950 bg-white px-1.5 py-0.5 rounded-lg border border-slate-200 mt-1 w-full text-center">
                         ${sub.formulaHtml}
                     </div>
                 `;
@@ -415,8 +435,8 @@
 
         /**
          * 物質ボタンが押されたときの処理
-         * - 別の物質が選ばれたらビーカーを新しい水にしてその物質を上から投入
-         * - 同じ物質がもう一度押されたら、もう1個その物質を上から投入
+         * - 別の物質が選ばれたらビーカーを新しい水にして、ビーカーの上に2個の分子を待機状態で出現させる
+         * - 同じ物質がもう一度押されたら、ビーカーの上にさらにもう1個待機分子を出現させる
          */
         function selectSubstance(sub) {
             const isSameSubstance = currentSubstance && currentSubstance.id === sub.id;
@@ -433,51 +453,73 @@
             }
 
             if (!isSameSubstance) {
-                // 新しい物質に切り替えた場合は水の状態をリセットして投入開始
+                // 新しい物質に切り替えた場合は水の状態をリセットし、電離式も再び伏せる
                 currentSubstance = sub;
                 currentIndicator = 'none';
+                showEquation = false;
                 fallingMolecules = [];
                 floatingParticles = [];
                 splashRipples = [];
                 indicatorDrops = [];
 
-                // 最初に見やすいよう2個連続で時間差をつけて投入する
-                spawnFallingMolecule(sub, -0.18);
-                setTimeout(() => {
-                    if (currentSubstance && currentSubstance.id === sub.id) {
-                        spawnFallingMolecule(sub, 0.18);
-                    }
-                }, 650);
+                // ビーカーの上部に2つの分子を並べて待機させる（タップしたら落下）
+                spawnWaitingMolecule(sub, -0.22);
+                spawnWaitingMolecule(sub, 0.22);
             } else {
-                // 既に選択中の物質ボタンをタップした場合は追加で1個投入
-                spawnFallingMolecule(sub, (Math.random() - 0.5) * 0.4);
+                // 既に選択中の物質ボタンをタップした場合は、ビーカーの上部に待機分子を追加
+                spawnWaitingMolecule(sub);
             }
 
             updateUI();
         }
 
         /**
-         * 水の上から分子（電離前の塊）を落下させる
+         * ビーカーの上あたりに待機状態の分子を出現させる（タップすると水の中に落ちる）
          */
-        function spawnFallingMolecule(sub, horizontalRatioOffset = 0) {
-            // 画面が窮屈にならないよう最大8分子分までに制限
+        function spawnWaitingMolecule(sub, explicitOffset = null) {
+            // 既にビーカー上で待機している分子の数をチェック（重なりすぎを防ぐため最大3個まで待機可能）
+            const waitingList = fallingMolecules.filter(m => m.state === 'waiting');
+            if (waitingList.length >= 3) {
+                // 既に3個待機している場合は、一番古い待機分子を自動的に落としてスペースを空ける
+                waitingList[0].state = 'falling';
+            }
+
+            // 水中のイオンが多くなりすぎないよう最大8分子分までに制限
             const totalUnits = fallingMolecules.length + (floatingParticles.length / sub.moleculeParts.length);
-            if (totalUnits >= 8) {
-                // 既にたくさんの場合は一番古い粒子セットを消して新しいものを入れる
+            if (totalUnits >= 8 && floatingParticles.length >= sub.moleculeParts.length) {
                 floatingParticles.splice(0, sub.moleculeParts.length);
             }
 
-            const startX = beakerRect.x + beakerRect.w * (0.5 + horizontalRatioOffset);
-            const startY = beakerRect.y - 30;
-            const targetDissolveY = beakerRect.waterTop + beakerRect.h * (0.22 + Math.random() * 0.12);
+            // 横位置の決定（指定がなければ空いている場所を探す）
+            let ratioOffset = explicitOffset;
+            if (ratioOffset === null) {
+                const candidateOffsets = [-0.24, 0.24, 0];
+                ratioOffset = 0;
+                for (const cand of candidateOffsets) {
+                    const candX = beakerRect.x + beakerRect.w * (0.5 + cand);
+                    const isOccupied = waitingList.some(m => Math.abs(m.x - candX) < 85);
+                    if (!isOccupied) {
+                        ratioOffset = cand;
+                        break;
+                    }
+                }
+            }
+
+            const startX = beakerRect.x + beakerRect.w * (0.5 + ratioOffset);
+            // ビーカー上端の少し上の見やすい位置で止まるように設定
+            const waitY = Math.max(54, beakerRect.y - 26);
+            const targetDissolveY = beakerRect.waterTop + beakerRect.h * (0.24 + Math.random() * 0.14);
 
             fallingMolecules.push({
                 substance: sub,
+                ratioOffset: ratioOffset,
                 x: startX,
-                y: startY,
-                vy: 3.5,
+                y: waitY,
+                baseY: waitY,
+                vy: 3.2,
                 targetY: targetDissolveY,
-                state: 'falling', // 'falling' -> 'shaking' -> 'done'
+                state: 'waiting', // 'waiting' (ビーカー上で待機) -> 'falling' (落下) -> 'shaking' (電離直前)
+                floatPhase: Math.random() * Math.PI * 2,
                 shakeTimer: 0,
                 enteredWater: false
             });
@@ -580,11 +622,16 @@
             const liquidNameEl = document.getElementById('currentLiquidName');
             const addMoreBtn = document.getElementById('addMoreBtn');
             const addMoreBtnText = document.getElementById('addMoreBtnText');
+            const toggleEquationBtn = document.getElementById('toggleEquationBtn');
             const equationDisplay = document.getElementById('equationDisplay');
             const substanceTypeBadge = document.getElementById('substanceTypeBadge');
             const indicatorBadge = document.getElementById('indicatorStatusBadge');
             const resultSummaryBox = document.getElementById('resultSummaryBox');
             const resultSummaryText = document.getElementById('resultSummaryText');
+
+            if (toggleEquationBtn) {
+                toggleEquationBtn.textContent = showEquation ? '式を隠す' : '式を表示する';
+            }
 
             if (!currentSubstance) {
                 liquidNameEl.innerHTML = 'ただの水（純水）';
@@ -596,18 +643,20 @@
             } else {
                 liquidNameEl.innerHTML = `${currentSubstance.name}水溶液 <span class="text-base font-bold text-slate-500">(${currentSubstance.formulaHtml})</span>`;
                 addMoreBtn.disabled = false;
-                addMoreBtnText.innerHTML = `＋ もう1個 <b>${currentSubstance.formulaHtml}</b> を水に溶かす`;
+                addMoreBtnText.innerHTML = `＋ もう1個 <b>${currentSubstance.formulaHtml}</b> をビーカーの上に出す`;
 
                 if (showEquation) {
                     equationDisplay.innerHTML = currentSubstance.equationHtml;
                     substanceTypeBadge.textContent = currentSubstance.description;
                 } else {
-                    equationDisplay.innerHTML = '<span class="text-slate-400">？？？ → ？？？</span>';
-                    substanceTypeBadge.textContent = '（式を非表示にしています）';
+                    equationDisplay.innerHTML = '<span class="text-amber-300 text-lg md:text-2xl">🔒 タップして電離の式を表示</span>';
+                    substanceTypeBadge.textContent = 'どんなイオンに分かれるか予想してからタップしよう！';
                 }
 
-                // 液性に応じたバッジ色
-                if (currentSubstance.category === 'acid') {
+                // 液性に応じたバッジ色（式を表示しているときのみ色分けし、伏せているときはヒントにならないようグレーにする）
+                if (!showEquation) {
+                    substanceTypeBadge.className = 'text-xs md:text-sm font-bold px-3 py-0.5 rounded-full bg-slate-700 text-slate-300 mt-1';
+                } else if (currentSubstance.category === 'acid') {
                     substanceTypeBadge.className = 'text-xs md:text-sm font-bold px-3 py-0.5 rounded-full bg-red-900/80 text-red-200 mt-1';
                 } else if (currentSubstance.category === 'alkaline') {
                     substanceTypeBadge.className = 'text-xs md:text-sm font-bold px-3 py-0.5 rounded-full bg-blue-900/80 text-blue-200 mt-1';
@@ -701,12 +750,12 @@
             const w = rect.width;
             const h = rect.height;
 
-            // ビーカーのサイズを計算（大きく見やすく配置）
+            // ビーカー上部に待機分子を置くスペースを確保するため、ビーカーの高さを調整
             const beakerW = Math.min(w * 0.82, 540);
-            const beakerH = Math.min(h * 0.78, 370);
+            const beakerH = Math.min(h * 0.68, 335);
             const beakerX = (w - beakerW) / 2;
-            const beakerY = h - beakerH - 20;
-            const waterTop = beakerY + beakerH * 0.16;
+            const beakerY = h - beakerH - 14;
+            const waterTop = beakerY + beakerH * 0.15;
 
             beakerRect = {
                 x: beakerX,
@@ -715,6 +764,16 @@
                 h: beakerH,
                 waterTop: waterTop
             };
+
+            // リサイズ時に待機中の分子の位置もビーカーに合わせて補正
+            fallingMolecules.forEach(mol => {
+                if (mol.state === 'waiting') {
+                    mol.x = beakerRect.x + beakerRect.w * (0.5 + (mol.ratioOffset || 0));
+                    mol.baseY = Math.max(54, beakerRect.y - 26);
+                    mol.y = mol.baseY;
+                    mol.targetY = beakerRect.waterTop + beakerRect.h * 0.28;
+                }
+            });
         }
 
         /**
@@ -825,37 +884,67 @@
         }
 
         /**
-         * 落下中（電離前）の結合した分子を描画
+         * 待機中または落下中（電離前）の結合した分子を描画
          */
         function drawFallingMolecule(mol) {
             ctx.save();
             let shakeOffsetX = 0;
+            let floatOffsetY = 0;
+
             if (mol.state === 'shaking') {
                 shakeOffsetX = Math.sin(mol.shakeTimer * 1.8) * 5;
+            } else if (mol.state === 'waiting') {
+                // 待機中はふわふわ上下に揺れてタップを促す
+                floatOffsetY = Math.sin(mol.floatPhase) * 4;
             }
-            ctx.translate(mol.x + shakeOffsetX, mol.y);
+            ctx.translate(mol.x + shakeOffsetX, mol.y + floatOffsetY);
+
+            // 待機中はタップしやすいよう背面に光るガイド枠を描画
+            if (mol.state === 'waiting') {
+                ctx.beginPath();
+                ctx.roundRect(-64, -44, 128, 88, 42);
+                ctx.fillStyle = 'rgba(254, 243, 199, 0.75)';
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#f59e0b';
+                ctx.stroke();
+            }
 
             // 結合を示すカプセル型の白い外枠を描画（電離前であることを強調）
             if (mol.substance.isElectrolyte) {
                 ctx.beginPath();
                 ctx.roundRect(-56, -38, 112, 76, 36);
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
                 ctx.fill();
                 ctx.lineWidth = 3;
-                ctx.strokeStyle = '#94a3b8';
+                ctx.strokeStyle = mol.state === 'waiting' ? '#d97706' : '#94a3b8';
                 ctx.stroke();
             }
 
-            // 構成パーツをくっついた状態で描画（電離前なのでchargeは表示しない）
-            mol.substance.moleculeParts.forEach(part => {
+            // 構成パーツをくっついた状態で描画（アンモニアのようにpreDissolvePartsがある場合はそれを使用）
+            const partsToDraw = mol.substance.preDissolveParts || mol.substance.moleculeParts;
+            partsToDraw.forEach(part => {
                 drawIonSphere(part.offsetX * 0.75, part.offsetY * 0.75, part.radius * 0.9, part.label, '', part.type, 1);
             });
 
-            // 上部に化学式ラベルを表示
-            ctx.fillStyle = '#1e293b';
-            ctx.font = '900 16px "Noto Sans JP", sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(mol.substance.formulaText, 0, -46);
+            // 上部に化学式ラベル、または「タップして水へ！」のバッジを表示
+            if (mol.state === 'waiting') {
+                ctx.beginPath();
+                ctx.roundRect(-58, -68, 116, 24, 12);
+                ctx.fillStyle = '#d97706';
+                ctx.fill();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '900 12px "Noto Sans JP", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('👆タップで水へ', 0, -56);
+            } else {
+                ctx.fillStyle = '#1e293b';
+                ctx.font = '900 16px "Noto Sans JP", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(mol.substance.formulaText, 0, -46);
+            }
 
             ctx.restore();
         }
@@ -894,14 +983,22 @@
             ctx.strokeStyle = 'rgba(255,255,255,0.8)';
             ctx.stroke();
 
-            // 初期状態で何も入っていない場合のガイド表示
+            // 初期状態で何も入っていない場合のガイド表示、または分子が上で待機しているときのガイド表示
             if (!currentSubstance && fallingMolecules.length === 0 && floatingParticles.length === 0) {
                 ctx.save();
                 ctx.fillStyle = '#334155';
                 ctx.font = '900 22px "Noto Sans JP", sans-serif';
                 ctx.textAlign = 'center';
-                ctx.fillText('上の9つのボタンから', bx + bw / 2, waterTop + waterH * 0.43);
+                ctx.fillText('上の10個のボタンから', bx + bw / 2, waterTop + waterH * 0.43);
                 ctx.fillText('水に溶かす物質をタップしよう！', bx + bw / 2, waterTop + waterH * 0.56);
+                ctx.restore();
+            } else if (floatingParticles.length === 0 && fallingMolecules.some(m => m.state === 'waiting')) {
+                ctx.save();
+                ctx.fillStyle = '#0f172a';
+                ctx.font = '900 20px "Noto Sans JP", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('ビーカーの上にある分子をタップして', bx + bw / 2, waterTop + waterH * 0.45);
+                ctx.fillText('水の中に入れてみよう！', bx + bw / 2, waterTop + waterH * 0.58);
                 ctx.restore();
             }
 
@@ -937,11 +1034,14 @@
                 }
             }
 
-            // 3. 落下中の分子（電離前）の更新＆描画
+            // 3. 待機中・落下中の分子（電離前）の更新＆描画
             for (let i = fallingMolecules.length - 1; i >= 0; i--) {
                 const mol = fallingMolecules[i];
 
-                if (mol.state === 'falling') {
+                if (mol.state === 'waiting') {
+                    // ビーカーの上でふわふわ待機
+                    mol.floatPhase += 0.07;
+                } else if (mol.state === 'falling') {
                     mol.y += mol.vy;
                     mol.vy += 0.18;
 
@@ -1119,19 +1219,53 @@
             resizeCanvas();
             window.addEventListener('resize', resizeCanvas);
 
-            // 「＋もう1個水に溶かす」ボタン
-            document.getElementById('addMoreBtn').addEventListener('click', () => {
-                if (currentSubstance) {
-                    spawnFallingMolecule(currentSubstance, (Math.random() - 0.5) * 0.45);
+            // キャンバス上の待機分子をタップ（またはクリック）したときに落下を開始する処理
+            canvas.addEventListener('pointerdown', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const clickX = e.clientX - rect.left;
+                const clickY = e.clientY - rect.top;
+
+                // 待機中の分子とタップ座標の当たり判定（iPadで押しやすいよう広めに判定）
+                for (let i = fallingMolecules.length - 1; i >= 0; i--) {
+                    const mol = fallingMolecules[i];
+                    if (mol.state === 'waiting') {
+                        const dx = Math.abs(clickX - mol.x);
+                        const dy = Math.abs(clickY - mol.y);
+                        if (dx <= 72 && dy <= 62) {
+                            mol.state = 'falling';
+                            break;
+                        }
+                    }
                 }
             });
 
-            // 電離の式の表示/非表示切り替え
-            document.getElementById('toggleEquationBtn').addEventListener('click', (e) => {
-                showEquation = !showEquation;
-                e.target.textContent = showEquation ? '式を隠す' : '式を表示する';
-                updateUI();
+            // 待機分子の上にマウスカーソルが乗ったときにポインター表示にする
+            canvas.addEventListener('pointermove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const moveX = e.clientX - rect.left;
+                const moveY = e.clientY - rect.top;
+                const hoveringWaiting = fallingMolecules.some(mol =>
+                    mol.state === 'waiting' &&
+                    Math.abs(moveX - mol.x) <= 72 &&
+                    Math.abs(moveY - mol.y) <= 62
+                );
+                canvas.style.cursor = hoveringWaiting ? 'pointer' : 'default';
             });
+
+            // 「＋もう1個ビーカーの上に出す」ボタン
+            document.getElementById('addMoreBtn').addEventListener('click', () => {
+                if (currentSubstance) {
+                    spawnWaitingMolecule(currentSubstance);
+                }
+            });
+
+            // 電離の式の表示/非表示切り替え（ボタンおよび黒いカード自体のタップ両方に対応）
+            const toggleEquationHandler = () => {
+                showEquation = !showEquation;
+                updateUI();
+            };
+            document.getElementById('toggleEquationBtn').addEventListener('click', toggleEquationHandler);
+            document.getElementById('equationCard').addEventListener('click', toggleEquationHandler);
 
             // BTB溶液ボタン
             document.getElementById('btnBTB').addEventListener('click', () => {
@@ -1154,6 +1288,7 @@
             document.getElementById('btnResetAll').addEventListener('click', () => {
                 currentSubstance = null;
                 currentIndicator = 'none';
+                showEquation = false;
                 fallingMolecules = [];
                 floatingParticles = [];
                 splashRipples = [];
