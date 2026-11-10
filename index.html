@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <!-- ピンチアウト・ピンチインでの拡大縮小を許可するviewport設定 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中3理科：水溶液とイオン（電離と指示薬の反応）</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@500;700;900&display=swap');
+
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: #f1f5f9;
+            color: #0f172a;
+            /* タブレットでの誤選択を防ぎつつピンチズームは許可 */
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        /* 物質選択ボタンのアクティブ状態アニメーション */
+        .substance-btn {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .substance-btn:active {
+            transform: scale(0.95);
+        }
+        .substance-btn.active {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.15), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
+            border-width: 3px;
+        }
+
+        /* アクションボタンの立体感 */
+        .action-btn {
+            transition: all 0.15s ease;
+            box-shadow: 0 4px 0 rgba(0,0,0,0.2);
+        }
+        .action-btn:active:not(:disabled) {
+            transform: translateY(3px);
+            box-shadow: 0 1px 0 rgba(0,0,0,0.2);
+        }
+        .action-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* 化学式の上付き・下付き文字の調整 */
+        sub {
+            font-size: 0.7em;
+            vertical-align: -0.25em;
+        }
+        sup {
+            font-size: 0.7em;
+            vertical-align: 0.4em;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col p-2 md:p-4 gap-3 max-w-[1440px] mx-auto">
+
+    <!-- 1. 上部：9種類の物質を横に並べた選択ボタンエリア -->
+    <header class="bg-white rounded-2xl shadow-md p-2.5 border border-slate-200">
+        <div class="flex items-center justify-between mb-2 px-1">
+            <div class="flex items-center gap-2">
+                <span class="bg-indigo-600 text-white text-xs md:text-sm font-black px-2.5 py-1 rounded-lg">STEP 1</span>
+                <h1 class="text-base md:text-xl font-black text-slate-800">水に溶かす物質をえらぼう（タップすると水の中に落ちていきます）</h1>
+            </div>
+            <div class="flex items-center gap-3 text-xs md:text-sm font-bold">
+                <span class="flex items-center gap-1"><span class="inline-block w-4 h-4 rounded-full bg-red-600 border-2 border-white shadow"></span>水素イオン(H<sup>+</sup>)</span>
+                <span class="flex items-center gap-1"><span class="inline-block w-4 h-4 rounded-full bg-blue-600 border-2 border-white shadow"></span>水酸化物イオン(OH<sup>-</sup>)</span>
+            </div>
+        </div>
+
+        <!-- プルダウンを使わず9つのボタンを横一列（グリッド）で配置 -->
+        <div class="grid grid-cols-9 gap-1.5 md:gap-2" id="substanceButtonsContainer">
+            <!-- JSで9種類のボタンを生成 -->
+        </div>
+    </header>
+
+    <!-- 2. メインエリア（iPad横画面向けに左：大きなビーカー、右：操作＆解説パネル） -->
+    <main class="flex-1 grid grid-cols-12 gap-3 md:gap-4 items-stretch">
+
+        <!-- 左側（7列分）：ビーカーのアニメーション領域 -->
+        <section class="col-span-12 lg:col-span-7 bg-white rounded-2xl shadow-md border border-slate-200 p-3 flex flex-col items-center justify-between relative overflow-hidden">
+            
+            <!-- ビーカー上部の現在の状態ラベル -->
+            <div class="w-full flex flex-wrap items-center justify-between gap-2 z-10 px-2">
+                <div id="beakerTitleBadge" class="bg-slate-100 border-2 border-slate-300 text-slate-800 px-4 py-1.5 rounded-xl text-lg md:text-2xl font-black flex items-center gap-2">
+                    <span>💧</span>
+                    <span id="currentLiquidName">ただの水（純水）</span>
+                </div>
+
+                <!-- 現在の指示薬の色バッジ -->
+                <div id="indicatorStatusBadge" class="hidden px-4 py-1.5 rounded-xl text-base md:text-xl font-black border-2 shadow-sm">
+                    <!-- JSで更新 -->
+                </div>
+            </div>
+
+            <!-- キャンバス本体 -->
+            <div class="w-full flex-1 flex items-center justify-center my-1 min-h-[380px] md:min-h-[460px] relative">
+                <canvas id="beakerCanvas" class="w-full h-full max-h-[520px] block"></canvas>
+            </div>
+
+            <!-- ビーカー下部のイオン数カウンター -->
+            <div class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 flex flex-wrap items-center justify-around gap-2 text-sm md:text-base font-bold">
+                <div class="flex items-center gap-1.5">
+                    <span class="w-5 h-5 rounded-full bg-red-600 text-white text-xs flex items-center justify-center font-black">H⁺</span>
+                    <span>水素イオン：</span>
+                    <span id="countH" class="text-xl md:text-2xl font-black text-red-600">0</span>
+                    <span>個</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-black">OH⁻</span>
+                    <span>水酸化物イオン：</span>
+                    <span id="countOH" class="text-xl md:text-2xl font-black text-blue-600">0</span>
+                    <span>個</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="w-5 h-5 rounded-full bg-slate-500 text-white text-xs flex items-center justify-center font-black">他</span>
+                    <span>その他のイオン・分子：</span>
+                    <span id="countOther" class="text-xl md:text-2xl font-black text-slate-700">0</span>
+                    <span>個</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- 右側（5列分）：段階的な操作パネル＆電離の式 -->
+        <section class="col-span-12 lg:col-span-5 flex flex-col gap-3 justify-between">
+
+            <!-- STEP 2: 物質をさらに溶かす＆電離の式の確認 -->
+            <div class="bg-white rounded-2xl shadow-md border border-slate-200 p-4 flex flex-col gap-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="bg-amber-500 text-white text-xs md:text-sm font-black px-2.5 py-1 rounded-lg">STEP 2</span>
+                        <h2 class="text-base md:text-xl font-black text-slate-800">水の中での変化（電離）を見よう</h2>
+                    </div>
+                    <!-- 先生・生徒用：式を隠す/見せるトグル -->
+                    <button id="toggleEquationBtn" class="text-xs md:text-sm font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1 rounded-lg border border-slate-300">
+                        式を隠す
+                    </button>
+                </div>
+
+                <!-- 選択中の物質を水に入れるボタン -->
+                <div class="flex gap-2">
+                    <button id="addMoreBtn" disabled class="action-btn flex-1 bg-amber-500 hover:bg-amber-600 text-white font-black text-lg md:text-xl py-3.5 px-4 rounded-xl flex items-center justify-center gap-2">
+                        <span>🧪</span>
+                        <span id="addMoreBtnText">上のボタンから物質を選ぼう</span>
+                    </button>
+                </div>
+
+                <!-- 電離の式・解説ボックス -->
+                <div id="equationCard" class="bg-slate-800 text-white rounded-xl p-3.5 text-center flex flex-col items-center justify-center min-h-[110px] shadow-inner">
+                    <p class="text-xs md:text-sm text-slate-300 font-bold mb-1" id="equationSubTitle">電離のようす（化学反応式）</p>
+                    <div id="equationDisplay" class="text-xl md:text-3xl font-black tracking-wider my-1">
+                        物質を選択してください
+                    </div>
+                    <p id="substanceTypeBadge" class="text-xs md:text-sm font-bold px-3 py-0.5 rounded-full bg-slate-700 text-slate-200 mt-1">
+                        ビーカーには水だけが入っています
+                    </p>
+                </div>
+            </div>
+
+            <!-- STEP 3: 指示薬を加えるパネル -->
+            <div class="bg-white rounded-2xl shadow-md border border-slate-200 p-4 flex flex-col gap-3 flex-1 justify-between">
+                <div>
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="bg-emerald-600 text-white text-xs md:text-sm font-black px-2.5 py-1 rounded-lg">STEP 3</span>
+                        <h2 class="text-base md:text-xl font-black text-slate-800">指示薬を加えて色の変化を調べよう</h2>
+                    </div>
+                    <p class="text-xs md:text-sm text-slate-600 font-bold mb-3">
+                        水の中の <span class="text-red-600 font-black">H<sup>+</sup>（赤）</span> や <span class="text-blue-600 font-black">OH<sup>-</sup>（青）</span> に注目して、何色に変わるか予想してから押してみよう！
+                    </p>
+
+                    <div class="grid grid-cols-1 gap-2.5">
+                        <!-- BTB溶液ボタン -->
+                        <button id="btnBTB" class="action-btn w-full bg-gradient-to-r from-yellow-500 via-green-500 to-blue-600 text-white font-black text-lg md:text-xl py-3.5 px-4 rounded-xl flex items-center justify-between shadow-md border-2 border-white">
+                            <span class="flex items-center gap-2">
+                                <span class="text-2xl">💧</span>
+                                <span>BTB溶液を加える</span>
+                            </span>
+                            <span class="text-xs md:text-sm bg-black/25 px-2.5 py-1 rounded-lg font-bold">
+                                酸:黄 / 中:緑 / アルカリ:青
+                            </span>
+                        </button>
+
+                        <!-- フェノールフタレイン溶液ボタン -->
+                        <button id="btnPP" class="action-btn w-full bg-gradient-to-r from-slate-400 via-pink-500 to-rose-600 text-white font-black text-lg md:text-xl py-3.5 px-4 rounded-xl flex items-center justify-between shadow-md border-2 border-white">
+                            <span class="flex items-center gap-2">
+                                <span class="text-2xl">💧</span>
+                                <span>フェノールフタレイン溶液を加える</span>
+                            </span>
+                            <span class="text-xs md:text-sm bg-black/25 px-2.5 py-1 rounded-lg font-bold">
+                                アルカリ性で赤色
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 液性の判定結果表示ボックス -->
+                <div id="resultSummaryBox" class="bg-slate-50 border-2 border-slate-200 rounded-xl p-3 text-center">
+                    <div class="text-sm md:text-base font-bold text-slate-600" id="resultSummaryText">
+                        指示薬のボタンを押すと、ここに結果と理由が表示されます。
+                    </div>
+                </div>
+
+                <!-- リセットボタン群 -->
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                    <button id="btnClearIndicator" class="action-btn bg-slate-200 hover:bg-slate-300 text-slate-800 font-black text-sm md:text-base py-2.5 px-3 rounded-xl">
+                        指示薬の色だけ消す
+                    </button>
+                    <button id="btnResetAll" class="action-btn bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 font-black text-sm md:text-base py-2.5 px-3 rounded-xl">
+                        🔄 水だけに戻す（リセット）
+                    </button>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <script>
+        /**
+         * 9種類の物質データ定義
+         * - 酸性3種：塩化水素、硫酸、硝酸
+         * - アルカリ性4種：水酸化ナトリウム、水酸化カリウム、水酸化バリウム、水酸化カルシウム
+         * - 中性（電解質）1種：塩化ナトリウム
+         * - 中性（非電解質）1種：砂糖（スクロース）
+         */
+        const SUBSTANCES = [
+            {
+                id: 'hcl',
+                name: '塩化水素',
+                subName: '(塩酸)',
+                formulaHtml: 'HCl',
+                formulaText: 'HCl',
+                category: 'acid',
+                isElectrolyte: true,
+                equationHtml: 'HCl → <span class="text-red-400">H<sup>+</sup></span> + Cl<sup>-</sup>',
+                description: '電解質 ／ 酸性（H⁺が生じる）',
+                // 溶ける前の結合した粒子の構成（中心からの相対オフセット）
+                moleculeParts: [
+                    { label: 'H', charge: '+', type: 'H', offsetX: -20, offsetY: 0, radius: 22 },
+                    { label: 'Cl', charge: '-', type: 'other_anion', offsetX: 18, offsetY: 0, radius: 28 }
+                ]
+            },
+            {
+                id: 'h2so4',
+                name: '硫酸',
+                subName: '',
+                formulaHtml: 'H<sub>2</sub>SO<sub>4</sub>',
+                formulaText: 'H₂SO₄',
+                category: 'acid',
+                isElectrolyte: true,
+                equationHtml: 'H<sub>2</sub>SO<sub>4</sub> → <span class="text-red-400">2H<sup>+</sup></span> + SO<sub>4</sub><sup>2-</sup>',
+                description: '電解質 ／ 酸性（1つの分子からH⁺が2個生じる）',
+                moleculeParts: [
+                    { label: 'H', charge: '+', type: 'H', offsetX: -34, offsetY: -12, radius: 22 },
+                    { label: 'SO₄', charge: '2-', type: 'other_anion', offsetX: 0, offsetY: 4, radius: 33 },
+                    { label: 'H', charge: '+', type: 'H', offsetX: 34, offsetY: -12, radius: 22 }
+                ]
+            },
+            {
+                id: 'hno3',
+                name: '硝酸',
+                subName: '',
+                formulaHtml: 'HNO<sub>3</sub>',
+                formulaText: 'HNO₃',
+                category: 'acid',
+                isElectrolyte: true,
+                equationHtml: 'HNO<sub>3</sub> → <span class="text-red-400">H<sup>+</sup></span> + NO<sub>3</sub><sup>-</sup>',
+                description: '電解質 ／ 酸性（H⁺が生じる）',
+                moleculeParts: [
+                    { label: 'H', charge: '+', type: 'H', offsetX: -22, offsetY: 0, radius: 22 },
+                    { label: 'NO₃', charge: '-', type: 'other_anion', offsetX: 18, offsetY: 0, radius: 30 }
+                ]
+            },
+            {
+                id: 'naoh',
+                name: '水酸化ナトリウム',
+                subName: '',
+                formulaHtml: 'NaOH',
+                formulaText: 'NaOH',
+                category: 'alkaline',
+                isElectrolyte: true,
+                equationHtml: 'NaOH → Na<sup>+</sup> + <span class="text-sky-400">OH<sup>-</sup></span>',
+                description: '電解質 ／ アルカリ性（OH⁻が生じる）',
+                moleculeParts: [
+                    { label: 'Na', charge: '+', type: 'other_cation', offsetX: -20, offsetY: 0, radius: 26 },
+                    { label: 'OH', charge: '-', type: 'OH', offsetX: 20, offsetY: 0, radius: 26 }
+                ]
+            },
+            {
+                id: 'koh',
+                name: '水酸化カリウム',
+                subName: '',
+                formulaHtml: 'KOH',
+                formulaText: 'KOH',
+                category: 'alkaline',
+                isElectrolyte: true,
+                equationHtml: 'KOH → K<sup>+</sup> + <span class="text-sky-400">OH<sup>-</sup></span>',
+                description: '電解質 ／ アルカリ性（OH⁻が生じる）',
+                moleculeParts: [
+                    { label: 'K', charge: '+', type: 'other_cation', offsetX: -20, offsetY: 0, radius: 27 },
+                    { label: 'OH', charge: '-', type: 'OH', offsetX: 20, offsetY: 0, radius: 26 }
+                ]
+            },
+            {
+                id: 'baoh2',
+                name: '水酸化バリウム',
+                subName: '',
+                formulaHtml: 'Ba(OH)<sub>2</sub>',
+                formulaText: 'Ba(OH)₂',
+                category: 'alkaline',
+                isElectrolyte: true,
+                equationHtml: 'Ba(OH)<sub>2</sub> → Ba<sup>2+</sup> + <span class="text-sky-400">2OH<sup>-</sup></span>',
+                description: '電解質 ／ アルカリ性（Ba²⁺1個とOH⁻が2個生じる）',
+                moleculeParts: [
+                    { label: 'OH', charge: '-', type: 'OH', offsetX: -34, offsetY: -10, radius: 26 },
+                    { label: 'Ba', charge: '2+', type: 'other_cation', offsetX: 0, offsetY: 4, radius: 31 },
+                    { label: 'OH', charge: '-', type: 'OH', offsetX: 34, offsetY: -10, radius: 26 }
+                ]
+            },
+            {
+                id: 'caoh2',
+                name: '水酸化カルシウム',
+                subName: '(石灰水)',
+                formulaHtml: 'Ca(OH)<sub>2</sub>',
+                formulaText: 'Ca(OH)₂',
+                category: 'alkaline',
+                isElectrolyte: true,
+                equationHtml: 'Ca(OH)<sub>2</sub> → Ca<sup>2+</sup> + <span class="text-sky-400">2OH<sup>-</sup></span>',
+                description: '電解質 ／ アルカリ性（Ca²⁺1個とOH⁻が2個生じる）',
+                moleculeParts: [
+                    { label: 'OH', charge: '-', type: 'OH', offsetX: -33, offsetY: -10, radius: 26 },
+                    { label: 'Ca', charge: '2+', type: 'other_cation', offsetX: 0, offsetY: 4, radius: 29 },
+                    { label: 'OH', charge: '-', type: 'OH', offsetX: 33, offsetY: -10, radius: 26 }
+                ]
+            },
+            {
+                id: 'nacl',
+                name: '塩化ナトリウム',
+                subName: '(食塩)',
+                formulaHtml: 'NaCl',
+                formulaText: 'NaCl',
+                category: 'neutral',
+                isElectrolyte: true,
+                equationHtml: 'NaCl → Na<sup>+</sup> + Cl<sup>-</sup>',
+                description: '電解質 ／ 中性（電離するがH⁺もOH⁻も生じない）',
+                moleculeParts: [
+                    { label: 'Na', charge: '+', type: 'other_cation', offsetX: -20, offsetY: 0, radius: 26 },
+                    { label: 'Cl', charge: '-', type: 'other_anion', offsetX: 20, offsetY: 0, radius: 28 }
+                ]
+            },
+            {
+                id: 'sucrose',
+                name: '砂糖',
+                subName: '(スクロース)',
+                formulaHtml: '砂糖',
+                formulaText: '砂糖',
+                category: 'neutral',
+                isElectrolyte: false,
+                equationHtml: '電離しない（分子のまま水中に広がる）',
+                description: '非電解質 ／ 中性（イオンに分かれない）',
+                moleculeParts: [
+                    { label: '砂糖', charge: '', type: 'molecule', offsetX: 0, offsetY: 0, radius: 36 }
+                ]
+            }
+        ];
+
+        // アプリケーションの状態管理
+        let currentSubstance = null;
+        let currentIndicator = 'none'; // 'none' | 'btb' | 'pp'
+        let showEquation = true;
+
+        // アニメーション用オブジェクト配列
+        let fallingMolecules = []; // 水に向かって落下中〜電離直前の塊
+        let floatingParticles = []; // 水中で電離して漂っているイオン（または砂糖分子）
+        let splashRipples = [];     // 水面に落ちたときの波紋・電離エフェクト
+        let indicatorDrops = [];    // 指示薬のスポイトから落ちるしずく
+
+        // キャンバス参照
+        const canvas = document.getElementById('beakerCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // ビーカーの描画座標キャッシュ
+        let beakerRect = { x: 0, y: 0, w: 0, h: 0, waterTop: 0 };
+
+        /**
+         * 1. 上部の9つの物質選択ボタンを生成
+         */
+        function initSubstanceButtons() {
+            const container = document.getElementById('substanceButtonsContainer');
+            container.innerHTML = '';
+
+            SUBSTANCES.forEach(sub => {
+                const btn = document.createElement('button');
+                btn.id = `sub-btn-${sub.id}`;
+                btn.className = `substance-btn flex flex-col items-center justify-between p-1.5 md:p-2 rounded-xl border-2 border-slate-300 bg-slate-50 hover:bg-white text-slate-800 shadow-sm h-full`;
+                
+                btn.innerHTML = `
+                    <div class="text-[11px] md:text-xs font-black leading-tight text-center text-slate-700">
+                        ${sub.name}
+                        ${sub.subName ? `<span class="block text-[10px] text-slate-500 font-bold">${sub.subName}</span>` : ''}
+                    </div>
+                    <div class="text-sm md:text-lg font-black text-indigo-950 bg-white px-2 py-0.5 rounded-lg border border-slate-200 mt-1 w-full text-center">
+                        ${sub.formulaHtml}
+                    </div>
+                `;
+
+                btn.addEventListener('click', () => selectSubstance(sub));
+                container.appendChild(btn);
+            });
+        }
+
+        /**
+         * 物質ボタンが押されたときの処理
+         * - 別の物質が選ばれたらビーカーを新しい水にしてその物質を上から投入
+         * - 同じ物質がもう一度押されたら、もう1個その物質を上から投入
+         */
+        function selectSubstance(sub) {
+            const isSameSubstance = currentSubstance && currentSubstance.id === sub.id;
+
+            // ボタンの選択スタイル更新
+            document.querySelectorAll('.substance-btn').forEach(b => {
+                b.classList.remove('active', 'border-indigo-600', 'bg-indigo-50');
+                b.classList.add('border-slate-300', 'bg-slate-50');
+            });
+            const activeBtn = document.getElementById(`sub-btn-${sub.id}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('border-slate-300', 'bg-slate-50');
+                activeBtn.classList.add('active', 'border-indigo-600', 'bg-indigo-50');
+            }
+
+            if (!isSameSubstance) {
+                // 新しい物質に切り替えた場合は水の状態をリセットして投入開始
+                currentSubstance = sub;
+                currentIndicator = 'none';
+                fallingMolecules = [];
+                floatingParticles = [];
+                splashRipples = [];
+                indicatorDrops = [];
+
+                // 最初に見やすいよう2個連続で時間差をつけて投入する
+                spawnFallingMolecule(sub, -0.18);
+                setTimeout(() => {
+                    if (currentSubstance && currentSubstance.id === sub.id) {
+                        spawnFallingMolecule(sub, 0.18);
+                    }
+                }, 650);
+            } else {
+                // 既に選択中の物質ボタンをタップした場合は追加で1個投入
+                spawnFallingMolecule(sub, (Math.random() - 0.5) * 0.4);
+            }
+
+            updateUI();
+        }
+
+        /**
+         * 水の上から分子（電離前の塊）を落下させる
+         */
+        function spawnFallingMolecule(sub, horizontalRatioOffset = 0) {
+            // 画面が窮屈にならないよう最大8分子分までに制限
+            const totalUnits = fallingMolecules.length + (floatingParticles.length / sub.moleculeParts.length);
+            if (totalUnits >= 8) {
+                // 既にたくさんの場合は一番古い粒子セットを消して新しいものを入れる
+                floatingParticles.splice(0, sub.moleculeParts.length);
+            }
+
+            const startX = beakerRect.x + beakerRect.w * (0.5 + horizontalRatioOffset);
+            const startY = beakerRect.y - 30;
+            const targetDissolveY = beakerRect.waterTop + beakerRect.h * (0.22 + Math.random() * 0.12);
+
+            fallingMolecules.push({
+                substance: sub,
+                x: startX,
+                y: startY,
+                vy: 3.5,
+                targetY: targetDissolveY,
+                state: 'falling', // 'falling' -> 'shaking' -> 'done'
+                shakeTimer: 0,
+                enteredWater: false
+            });
+        }
+
+        /**
+         * 電離（または非電解質の拡散）を実行する
+         */
+        function dissociateMolecule(mol) {
+            const sub = mol.substance;
+
+            // 電離した瞬間のエフェクトリングを追加
+            splashRipples.push({
+                x: mol.x,
+                y: mol.y,
+                radius: 15,
+                maxRadius: sub.isElectrolyte ? 85 : 55,
+                color: sub.isElectrolyte ? 'rgba(250, 204, 21, 0.9)' : 'rgba(148, 163, 184, 0.6)',
+                text: sub.isElectrolyte ? '電離！' : '分子のまま！',
+                alpha: 1.0
+            });
+
+            // 各構成粒子を独立した浮遊イオン（または砂糖分子）として生成
+            const count = sub.moleculeParts.length;
+            sub.moleculeParts.forEach((part, index) => {
+                // パカッと分かれるための初速度ベクトルを計算
+                let vx, vy;
+                if (count === 1) {
+                    // 砂糖（非電解質）は分かれずにゆったり漂う
+                    const angle = Math.random() * Math.PI * 2;
+                    vx = Math.cos(angle) * 1.2;
+                    vy = Math.sin(angle) * 1.2;
+                } else {
+                    // 電解質は結合位置から外側に向かってパカッと弾ける速度を与える
+                    const dx = part.offsetX || (index === 0 ? -1 : 1);
+                    const dy = part.offsetY || (Math.random() - 0.5) * 10;
+                    const len = Math.hypot(dx, dy) || 1;
+                    vx = (dx / len) * 3.8 + (Math.random() - 0.5) * 0.8;
+                    vy = (dy / len) * 3.2 + (Math.random() - 0.5) * 0.8;
+                }
+
+                floatingParticles.push({
+                    label: part.label,
+                    charge: part.charge,
+                    type: part.type, // 'H' | 'OH' | 'other_cation' | 'other_anion' | 'molecule'
+                    x: mol.x + part.offsetX * 0.6,
+                    y: mol.y + part.offsetY * 0.6,
+                    vx: vx,
+                    vy: vy,
+                    radius: part.radius,
+                    scale: 1.25 // 分かれた瞬間に少し大きくポップする演出
+                });
+            });
+
+            updateIonCounts();
+        }
+
+        /**
+         * 指示薬のスポイトしずくを落とす演出
+         */
+        function triggerIndicator(indicatorType) {
+            indicatorDrops = [];
+            const dropColor = indicatorType === 'btb' ? '#16a34a' : '#e11d48';
+
+            // 3粒のしずくを上から落とす
+            for (let i = 0; i < 3; i++) {
+                indicatorDrops.push({
+                    x: beakerRect.x + beakerRect.w * 0.5 + (i - 1) * 18,
+                    y: beakerRect.y - 10 - i * 28,
+                    vy: 6,
+                    color: dropColor,
+                    targetType: indicatorType
+                });
+            }
+        }
+
+        /**
+         * イオン数のカウントとUI表示の更新
+         */
+        function updateIonCounts() {
+            let hCount = 0;
+            let ohCount = 0;
+            let otherCount = 0;
+
+            floatingParticles.forEach(p => {
+                if (p.type === 'H') hCount++;
+                else if (p.type === 'OH') ohCount++;
+                else otherCount++;
+            });
+
+            document.getElementById('countH').textContent = hCount;
+            document.getElementById('countOH').textContent = ohCount;
+            document.getElementById('countOther').textContent = otherCount;
+        }
+
+        /**
+         * 画面のテキスト・ボタン・解説パネルを更新
+         */
+        function updateUI() {
+            const liquidNameEl = document.getElementById('currentLiquidName');
+            const addMoreBtn = document.getElementById('addMoreBtn');
+            const addMoreBtnText = document.getElementById('addMoreBtnText');
+            const equationDisplay = document.getElementById('equationDisplay');
+            const substanceTypeBadge = document.getElementById('substanceTypeBadge');
+            const indicatorBadge = document.getElementById('indicatorStatusBadge');
+            const resultSummaryBox = document.getElementById('resultSummaryBox');
+            const resultSummaryText = document.getElementById('resultSummaryText');
+
+            if (!currentSubstance) {
+                liquidNameEl.innerHTML = 'ただの水（純水）';
+                addMoreBtn.disabled = true;
+                addMoreBtnText.textContent = '上のボタンから物質を選ぼう';
+                equationDisplay.innerHTML = '物質を選択してください';
+                substanceTypeBadge.textContent = 'ビーカーには水だけが入っています';
+                substanceTypeBadge.className = 'text-xs md:text-sm font-bold px-3 py-0.5 rounded-full bg-slate-700 text-slate-200 mt-1';
+            } else {
+                liquidNameEl.innerHTML = `${currentSubstance.name}水溶液 <span class="text-base font-bold text-slate-500">(${currentSubstance.formulaHtml})</span>`;
+                addMoreBtn.disabled = false;
+                addMoreBtnText.innerHTML = `＋ もう1個 <b>${currentSubstance.formulaHtml}</b> を水に溶かす`;
+
+                if (showEquation) {
+                    equationDisplay.innerHTML = currentSubstance.equationHtml;
+                    substanceTypeBadge.textContent = currentSubstance.description;
+                } else {
+                    equationDisplay.innerHTML = '<span class="text-slate-400">？？？ → ？？？</span>';
+                    substanceTypeBadge.textContent = '（式を非表示にしています）';
+                }
+
+                // 液性に応じたバッジ色
+                if (currentSubstance.category === 'acid') {
+                    substanceTypeBadge.className = 'text-xs md:text-sm font-bold px-3 py-0.5 rounded-full bg-red-900/80 text-red-200 mt-1';
+                } else if (currentSubstance.category === 'alkaline') {
+                    substanceTypeBadge.className = 'text-xs md:text-sm font-bold px-3 py-0.5 rounded-full bg-blue-900/80 text-blue-200 mt-1';
+                } else {
+                    substanceTypeBadge.className = 'text-xs md:text-sm font-bold px-3 py-0.5 rounded-full bg-emerald-900/80 text-emerald-200 mt-1';
+                }
+            }
+
+            // 指示薬の状態表示を更新
+            const category = currentSubstance ? currentSubstance.category : 'neutral';
+
+            if (currentIndicator === 'none') {
+                indicatorBadge.className = 'hidden';
+                resultSummaryBox.className = 'bg-slate-50 border-2 border-slate-200 rounded-xl p-3 text-center';
+                resultSummaryText.innerHTML = '指示薬のボタンを押すと、ここに<b>色の変化と液性（酸性・アルカリ性・中性）</b>のまとめが表示されます。';
+            } else if (currentIndicator === 'btb') {
+                indicatorBadge.classList.remove('hidden');
+                if (category === 'acid') {
+                    indicatorBadge.className = 'px-4 py-1.5 rounded-xl text-base md:text-xl font-black border-2 bg-yellow-300 border-yellow-500 text-yellow-950 shadow-sm';
+                    indicatorBadge.textContent = 'BTB溶液：黄色（酸性）';
+                    resultSummaryBox.className = 'bg-yellow-50 border-2 border-yellow-400 rounded-xl p-3 text-center';
+                    resultSummaryText.innerHTML = `水の中に <span class="text-red-600 font-black">水素イオン(H<sup>+</sup>)</span> があるため<b>酸性</b>となり、BTB溶液は<b class="text-amber-600 underline">黄色</b>になります。`;
+                } else if (category === 'alkaline') {
+                    indicatorBadge.className = 'px-4 py-1.5 rounded-xl text-base md:text-xl font-black border-2 bg-blue-500 border-blue-700 text-white shadow-sm';
+                    indicatorBadge.textContent = 'BTB溶液：青色（アルカリ性）';
+                    resultSummaryBox.className = 'bg-blue-50 border-2 border-blue-400 rounded-xl p-3 text-center';
+                    resultSummaryText.innerHTML = `水の中に <span class="text-blue-600 font-black">水酸化物イオン(OH<sup>-</sup>)</span> があるため<b>アルカリ性</b>となり、BTB溶液は<b class="text-blue-600 underline">青色</b>になります。`;
+                } else {
+                    indicatorBadge.className = 'px-4 py-1.5 rounded-xl text-base md:text-xl font-black border-2 bg-green-500 border-green-700 text-white shadow-sm';
+                    indicatorBadge.textContent = 'BTB溶液：緑色（中性）';
+                    resultSummaryBox.className = 'bg-green-50 border-2 border-green-400 rounded-xl p-3 text-center';
+                    resultSummaryText.innerHTML = `<span class="text-red-600 font-black">H<sup>+</sup></span> も <span class="text-blue-600 font-black">OH<sup>-</sup></span> もないため<b>中性</b>となり、BTB溶液は<b class="text-green-700 underline">緑色</b>になります。`;
+                }
+            } else if (currentIndicator === 'pp') {
+                indicatorBadge.classList.remove('hidden');
+                if (category === 'alkaline') {
+                    indicatorBadge.className = 'px-4 py-1.5 rounded-xl text-base md:text-xl font-black border-2 bg-rose-500 border-rose-700 text-white shadow-sm';
+                    indicatorBadge.textContent = 'フェノールフタレイン：赤色（アルカリ性）';
+                    resultSummaryBox.className = 'bg-rose-50 border-2 border-rose-400 rounded-xl p-3 text-center';
+                    resultSummaryText.innerHTML = `水の中に <span class="text-blue-600 font-black">水酸化物イオン(OH<sup>-</sup>)</span> があるため<b>アルカリ性</b>となり、フェノールフタレイン溶液は<b class="text-rose-600 underline">赤色</b>になります。`;
+                } else {
+                    const label = category === 'acid' ? '酸性' : '中性';
+                    indicatorBadge.className = 'px-4 py-1.5 rounded-xl text-base md:text-xl font-black border-2 bg-slate-100 border-slate-400 text-slate-800 shadow-sm';
+                    indicatorBadge.textContent = `フェノールフタレイン：無色（${label}）`;
+                    resultSummaryBox.className = 'bg-slate-100 border-2 border-slate-300 rounded-xl p-3 text-center';
+                    resultSummaryText.innerHTML = `アルカリ性ではない（<b>${label}</b>）ため、フェノールフタレイン溶液を加えても<b>無色（変化なし）</b>のままです。`;
+                }
+            }
+
+            updateIonCounts();
+        }
+
+        /**
+         * 水溶液の背景色（指示薬と液性の組み合わせ）を取得
+         */
+        function getWaterColors() {
+            const category = currentSubstance ? currentSubstance.category : 'neutral';
+
+            if (currentIndicator === 'btb') {
+                if (category === 'acid') {
+                    // BTB + 酸性 = 黄色
+                    return { top: '#fef08a', bottom: '#facc15', surface: '#fde047' };
+                } else if (category === 'alkaline') {
+                    // BTB + アルカリ性 = 青色（OH-の濃い青球体と区別しやすい鮮やかな青）
+                    return { top: '#93c5fd', bottom: '#3b82f6', surface: '#60a5fa' };
+                } else {
+                    // BTB + 中性 = 緑色
+                    return { top: '#86efac', bottom: '#22c55e', surface: '#4ade80' };
+                }
+            } else if (currentIndicator === 'pp') {
+                if (category === 'alkaline') {
+                    // フェノールフタレイン + アルカリ性 = 赤色（濃いピンク〜赤）
+                    return { top: '#fda4af', bottom: '#f43f5e', surface: '#fb7185' };
+                }
+            }
+
+            // 指示薬なし、またはフェノールフタレイン無色反応時（透明感のある薄い水色）
+            return { top: '#e0f2fe', bottom: '#bae6fd', surface: '#ceecfe' };
+        }
+
+        /**
+         * キャンバスのリサイズ処理
+         */
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            const w = rect.width;
+            const h = rect.height;
+
+            // ビーカーのサイズを計算（大きく見やすく配置）
+            const beakerW = Math.min(w * 0.82, 540);
+            const beakerH = Math.min(h * 0.78, 370);
+            const beakerX = (w - beakerW) / 2;
+            const beakerY = h - beakerH - 20;
+            const waterTop = beakerY + beakerH * 0.16;
+
+            beakerRect = {
+                x: beakerX,
+                y: beakerY,
+                w: beakerW,
+                h: beakerH,
+                waterTop: waterTop
+            };
+        }
+
+        /**
+         * 個々のイオンまたは分子を描画するヘルパー関数
+         */
+        function drawIonSphere(x, y, radius, label, charge, type, scale = 1) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+
+            // 砂糖（非電解質の分子）は六角形の結晶モデルで描画
+            if (type === 'molecule') {
+                ctx.beginPath();
+                for (let i = 0; i < 6; i++) {
+                    const angle = (Math.PI / 3) * i - Math.PI / 6;
+                    const px = Math.cos(angle) * radius;
+                    const py = Math.sin(angle) * radius;
+                    if (i === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+
+                const grad = ctx.createRadialGradient(-radius * 0.2, -radius * 0.2, 4, 0, 0, radius);
+                grad.addColorStop(0, '#fef3c7');
+                grad.addColorStop(1, '#f59e0b');
+                ctx.fillStyle = grad;
+                ctx.shadowColor = 'rgba(0,0,0,0.25)';
+                ctx.shadowBlur = 8;
+                ctx.fill();
+
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = '#ffffff';
+                ctx.stroke();
+
+                ctx.fillStyle = '#78350f';
+                ctx.font = `900 ${Math.round(radius * 0.56)}px "Noto Sans JP", sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('砂糖', 0, -4);
+                ctx.font = `700 ${Math.round(radius * 0.34)}px "Noto Sans JP", sans-serif`;
+                ctx.fillText('(分子)', 0, radius * 0.45);
+
+                ctx.restore();
+                return;
+            }
+
+            // 電解質のイオン球体（H+は赤、OH-は青、その他は落ち着いたグレー系）
+            let gradStart, gradEnd, borderColor;
+            if (type === 'H') {
+                // 水素イオン：鮮やかな赤
+                gradStart = '#ff6b6b';
+                gradEnd = '#dc2626';
+                borderColor = '#ffffff';
+            } else if (type === 'OH') {
+                // 水酸化物イオン：鮮やかな濃い青
+                gradStart = '#3b82f6';
+                gradEnd = '#1d4ed8';
+                borderColor = '#ffffff';
+            } else if (type === 'other_cation') {
+                // その他の陽イオン(Na+, K+, Ba2+, Ca2+)：落ち着いたウォームグレー
+                gradStart = '#94a3b8';
+                gradEnd = '#475569';
+                borderColor = '#f8fafc';
+            } else {
+                // その他の陰イオン(Cl-, SO4 2-, NO3-)：落ち着いたスレートグレー
+                gradStart = '#cbd5e1';
+                gradEnd = '#64748b';
+                borderColor = '#f8fafc';
+            }
+
+            ctx.beginPath();
+            ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            const grad = ctx.createRadialGradient(-radius * 0.3, -radius * 0.3, radius * 0.1, 0, 0, radius);
+            grad.addColorStop(0, gradStart);
+            grad.addColorStop(1, gradEnd);
+            ctx.fillStyle = grad;
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.28)';
+            ctx.shadowBlur = 6;
+            ctx.fill();
+
+            // 指示薬で背景色が変わってもはっきり見えるよう白い縁取りをつける
+            ctx.lineWidth = 3.5;
+            ctx.strokeStyle = borderColor;
+            ctx.stroke();
+
+            // イオン式テキストの描画（例: H+, SO₄²⁻）
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+            ctx.shadowBlur = 2;
+
+            const baseFontSize = label.length >= 3 ? Math.round(radius * 0.62) : Math.round(radius * 0.78);
+            ctx.font = `900 ${baseFontSize}px "Noto Sans JP", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            const chargeOffset = charge ? radius * 0.15 : 0;
+            ctx.fillText(label, -chargeOffset, 2);
+
+            // 右上の価数（+, -, 2+, 2-）を描画
+            if (charge) {
+                const chargeFontSize = Math.round(radius * 0.5);
+                ctx.font = `900 ${chargeFontSize}px "Noto Sans JP", sans-serif`;
+                const labelWidth = ctx.measureText(label).width;
+                ctx.fillText(charge, labelWidth * 0.55, -radius * 0.32);
+            }
+
+            ctx.restore();
+        }
+
+        /**
+         * 落下中（電離前）の結合した分子を描画
+         */
+        function drawFallingMolecule(mol) {
+            ctx.save();
+            let shakeOffsetX = 0;
+            if (mol.state === 'shaking') {
+                shakeOffsetX = Math.sin(mol.shakeTimer * 1.8) * 5;
+            }
+            ctx.translate(mol.x + shakeOffsetX, mol.y);
+
+            // 結合を示すカプセル型の白い外枠を描画（電離前であることを強調）
+            if (mol.substance.isElectrolyte) {
+                ctx.beginPath();
+                ctx.roundRect(-56, -38, 112, 76, 36);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#94a3b8';
+                ctx.stroke();
+            }
+
+            // 構成パーツをくっついた状態で描画（電離前なのでchargeは表示しない）
+            mol.substance.moleculeParts.forEach(part => {
+                drawIonSphere(part.offsetX * 0.75, part.offsetY * 0.75, part.radius * 0.9, part.label, '', part.type, 1);
+            });
+
+            // 上部に化学式ラベルを表示
+            ctx.fillStyle = '#1e293b';
+            ctx.font = '900 16px "Noto Sans JP", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(mol.substance.formulaText, 0, -46);
+
+            ctx.restore();
+        }
+
+        /**
+         * メインのアニメーションループ
+         */
+        function animate() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const w = rect.width;
+            const h = rect.height;
+
+            ctx.clearRect(0, 0, w, h);
+
+            const { x: bx, y: by, w: bw, h: bh, waterTop } = beakerRect;
+            const waterH = (by + bh) - waterTop;
+            const colors = getWaterColors();
+
+            // 1. ビーカー内の水の背景描画
+            ctx.save();
+            ctx.beginPath();
+            ctx.roundRect(bx + 4, waterTop, bw - 8, waterH - 4, [0, 0, 24, 24]);
+            const waterGrad = ctx.createLinearGradient(0, waterTop, 0, by + bh);
+            waterGrad.addColorStop(0, colors.top);
+            waterGrad.addColorStop(1, colors.bottom);
+            ctx.fillStyle = waterGrad;
+            ctx.fill();
+            ctx.restore();
+
+            // 水面の楕円ハイライト
+            ctx.beginPath();
+            ctx.ellipse(bx + bw / 2, waterTop, (bw - 10) / 2, 10, 0, 0, Math.PI * 2);
+            ctx.fillStyle = colors.surface;
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+            ctx.stroke();
+
+            // 初期状態で何も入っていない場合のガイド表示
+            if (!currentSubstance && fallingMolecules.length === 0 && floatingParticles.length === 0) {
+                ctx.save();
+                ctx.fillStyle = '#334155';
+                ctx.font = '900 22px "Noto Sans JP", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('上の9つのボタンから', bx + bw / 2, waterTop + waterH * 0.43);
+                ctx.fillText('水に溶かす物質をタップしよう！', bx + bw / 2, waterTop + waterH * 0.56);
+                ctx.restore();
+            }
+
+            // 2. 指示薬のしずくの落下更新＆描画
+            for (let i = indicatorDrops.length - 1; i >= 0; i--) {
+                const drop = indicatorDrops[i];
+                drop.y += drop.vy;
+                drop.vy += 0.35;
+
+                // しずくの描画
+                ctx.beginPath();
+                ctx.arc(drop.x, drop.y, 9, 0, Math.PI * 2);
+                ctx.fillStyle = drop.color;
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#ffffff';
+                ctx.stroke();
+
+                // 水面に到達したら指示薬の色を反映
+                if (drop.y >= waterTop) {
+                    currentIndicator = drop.targetType;
+                    splashRipples.push({
+                        x: drop.x,
+                        y: waterTop,
+                        radius: 8,
+                        maxRadius: 45,
+                        color: drop.color,
+                        text: '',
+                        alpha: 0.9
+                    });
+                    indicatorDrops.splice(i, 1);
+                    updateUI();
+                }
+            }
+
+            // 3. 落下中の分子（電離前）の更新＆描画
+            for (let i = fallingMolecules.length - 1; i >= 0; i--) {
+                const mol = fallingMolecules[i];
+
+                if (mol.state === 'falling') {
+                    mol.y += mol.vy;
+                    mol.vy += 0.18;
+
+                    // 水面を通過した瞬間に波紋を出す
+                    if (!mol.enteredWater && mol.y >= waterTop) {
+                        mol.enteredWater = true;
+                        mol.vy *= 0.55; // 水中に入って減速
+                        splashRipples.push({
+                            x: mol.x,
+                            y: waterTop,
+                            radius: 10,
+                            maxRadius: 50,
+                            color: 'rgba(255, 255, 255, 0.9)',
+                            text: '',
+                            alpha: 1.0
+                        });
+                    }
+
+                    // 目標の深さに達したら少し震えてから電離する
+                    if (mol.y >= mol.targetY) {
+                        mol.y = mol.targetY;
+                        mol.state = 'shaking';
+                        mol.shakeTimer = 0;
+                    }
+                } else if (mol.state === 'shaking') {
+                    mol.shakeTimer++;
+                    if (mol.shakeTimer > 18) {
+                        dissociateMolecule(mol);
+                        fallingMolecules.splice(i, 1);
+                        continue;
+                    }
+                }
+
+                drawFallingMolecule(mol);
+            }
+
+            // 4. 水中を漂うイオン・分子の更新＆描画
+            const leftBound = bx + 16;
+            const rightBound = bx + bw - 16;
+            const topBound = waterTop + 18;
+            const bottomBound = by + bh - 16;
+
+            for (let i = 0; i < floatingParticles.length; i++) {
+                const p = floatingParticles[i];
+
+                // スケール演出の減衰
+                if (p.scale > 1) {
+                    p.scale = Math.max(1, p.scale - 0.02);
+                }
+
+                // 速度を適度に保ちながら移動（速すぎると減速、遅すぎると少し加速）
+                const speed = Math.hypot(p.vx, p.vy);
+                const idealSpeed = 1.35;
+                if (speed > idealSpeed * 1.4) {
+                    p.vx *= 0.94;
+                    p.vy *= 0.94;
+                } else if (speed < idealSpeed * 0.6) {
+                    p.vx *= 1.05;
+                    p.vy *= 1.05;
+                }
+
+                p.x += p.vx;
+                p.y += p.vy;
+
+                // ビーカーの壁と水面・底面での反射
+                if (p.x - p.radius < leftBound) {
+                    p.x = leftBound + p.radius;
+                    p.vx = Math.abs(p.vx);
+                } else if (p.x + p.radius > rightBound) {
+                    p.x = rightBound - p.radius;
+                    p.vx = -Math.abs(p.vx);
+                }
+
+                if (p.y - p.radius < topBound) {
+                    p.y = topBound + p.radius;
+                    p.vy = Math.abs(p.vy);
+                } else if (p.y + p.radius > bottomBound) {
+                    p.y = bottomBound - p.radius;
+                    p.vy = -Math.abs(p.vy);
+                }
+
+                // 粒子同士が重なりすぎないよう軽く反発させる
+                for (let j = i + 1; j < floatingParticles.length; j++) {
+                    const p2 = floatingParticles[j];
+                    const dx = p2.x - p.x;
+                    const dy = p2.y - p.y;
+                    const dist = Math.hypot(dx, dy);
+                    const minDist = (p.radius + p2.radius) * 0.95;
+                    if (dist > 0 && dist < minDist) {
+                        const overlap = (minDist - dist) * 0.04;
+                        const nx = dx / dist;
+                        const ny = dy / dist;
+                        p.vx -= nx * overlap;
+                        p.vy -= ny * overlap;
+                        p2.vx += nx * overlap;
+                        p2.vy += ny * overlap;
+                    }
+                }
+
+                drawIonSphere(p.x, p.y, p.radius, p.label, p.charge, p.type, p.scale);
+            }
+
+            // 5. 波紋・電離エフェクトの描画
+            for (let i = splashRipples.length - 1; i >= 0; i--) {
+                const rip = splashRipples[i];
+                rip.radius += 2.6;
+                rip.alpha -= 0.032;
+
+                if (rip.alpha <= 0) {
+                    splashRipples.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, rip.alpha);
+                ctx.beginPath();
+                ctx.arc(rip.x, rip.y, rip.radius, 0, Math.PI * 2);
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = rip.color;
+                ctx.stroke();
+
+                if (rip.text) {
+                    ctx.fillStyle = '#0f172a';
+                    ctx.font = '900 20px "Noto Sans JP", sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(rip.text, rip.x, rip.y - rip.radius * 0.5 - 10);
+                }
+                ctx.restore();
+            }
+
+            // 6. ビーカーのガラス外枠と目盛りの描画
+            ctx.save();
+            ctx.beginPath();
+            // 左上の注ぎ口リップから下底、右上まで
+            ctx.moveTo(bx - 8, by);
+            ctx.lineTo(bx, by + 12);
+            ctx.lineTo(bx, by + bh - 24);
+            ctx.quadraticCurveTo(bx, by + bh, bx + 24, by + bh);
+            ctx.lineTo(bx + bw - 24, by + bh);
+            ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw, by + bh - 24);
+            ctx.lineTo(bx + bw, by + 12);
+            ctx.lineTo(bx + bw + 8, by);
+
+            ctx.lineWidth = 6;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = '#475569';
+            ctx.stroke();
+
+            // ビーカーの目盛り線
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = 'rgba(71, 85, 105, 0.35)';
+            ctx.fillStyle = 'rgba(71, 85, 105, 0.55)';
+            ctx.font = '700 13px "Noto Sans JP", sans-serif';
+            ctx.textAlign = 'right';
+            const marks = ['100mL', '200mL', '300mL'];
+            for (let m = 1; m <= 3; m++) {
+                const my = by + bh - (bh * 0.22 * m);
+                ctx.beginPath();
+                ctx.moveTo(bx + bw - 35, my);
+                ctx.lineTo(bx + bw - 12, my);
+                ctx.stroke();
+                ctx.fillText(marks[m - 1], bx + bw - 40, my + 4);
+            }
+            ctx.restore();
+
+            requestAnimationFrame(animate);
+        }
+
+        /**
+         * イベントリスナーの登録
+         */
+        window.addEventListener('load', () => {
+            initSubstanceButtons();
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            // 「＋もう1個水に溶かす」ボタン
+            document.getElementById('addMoreBtn').addEventListener('click', () => {
+                if (currentSubstance) {
+                    spawnFallingMolecule(currentSubstance, (Math.random() - 0.5) * 0.45);
+                }
+            });
+
+            // 電離の式の表示/非表示切り替え
+            document.getElementById('toggleEquationBtn').addEventListener('click', (e) => {
+                showEquation = !showEquation;
+                e.target.textContent = showEquation ? '式を隠す' : '式を表示する';
+                updateUI();
+            });
+
+            // BTB溶液ボタン
+            document.getElementById('btnBTB').addEventListener('click', () => {
+                triggerIndicator('btb');
+            });
+
+            // フェノールフタレイン溶液ボタン
+            document.getElementById('btnPP').addEventListener('click', () => {
+                triggerIndicator('pp');
+            });
+
+            // 指示薬の色だけ消すボタン
+            document.getElementById('btnClearIndicator').addEventListener('click', () => {
+                currentIndicator = 'none';
+                indicatorDrops = [];
+                updateUI();
+            });
+
+            // 水だけに戻す（全体リセット）ボタン
+            document.getElementById('btnResetAll').addEventListener('click', () => {
+                currentSubstance = null;
+                currentIndicator = 'none';
+                fallingMolecules = [];
+                floatingParticles = [];
+                splashRipples = [];
+                indicatorDrops = [];
+                document.querySelectorAll('.substance-btn').forEach(b => {
+                    b.classList.remove('active', 'border-indigo-600', 'bg-indigo-50');
+                    b.classList.add('border-slate-300', 'bg-slate-50');
+                });
+                updateUI();
+            });
+
+            updateUI();
+            animate();
+        });
+    </script>
+</body>
+</html>
